@@ -1,5 +1,7 @@
 name: Laravel + Vite CI/CD
+# nama workflow
 
+# listener menunggu event untuk berjalan
 on:
   push:
     branches:
@@ -10,59 +12,51 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repository
-      - name: Checkout repository
-        uses: actions/checkout@v3
+    # checkout = memilih repository --> branch paling terakhir
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+      
+    # set up apa yang akan dipakai, github melakukan apa yang kita lakukan selama ini
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.3'
 
-      # 2️⃣ Setup PHP (for Laravel)
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.2'
+    # setup node JS for npm build
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+    
+    # install composer 
+    - name: Install Composer dependencies
+      run: composer install --no-dev --optimize-autoloader
+      
+    - name: Install NPM dependencies
+      run: npm ci
+    # CI itu noninteractive, so no Y/N, auto Yes
 
-      # 3️⃣ Setup Node.js (for npm build)
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '20'
+    # jalanin npm run build
+    - name: Build frontend assets
+      run: npm run build
 
-      # 4️⃣ Install dependencies
-      - name: Install Composer dependencies
-        run: composer install --no-dev --optimize-autoloader
+    # zip untuk masukin ke server
+    - name: Package for deployment
+      run: zip -r deploy.zip . -x ".git" "node_modules/" ".env" "storage/"
+    
+    # setup ssh
+    - name: setup SSH
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.SERVER_KEY }}
 
-      - name: Install NPM dependencies
-        run: npm ci
-
-      # 5️⃣ Build frontend (Vite)
-      - name: Build frontend assets
-        run: npm run build
-
-      # 6️⃣ Zip the project (exclude unnecessary files)
-      - name: Package for deployment
-        run: zip -r deploy.zip . -x "*.git*" "node_modules/*" ".env" "storage/*"
-
-      # 7️⃣ Setup SSH to server
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.server_key }}
-
-      # 8️⃣ Upload and deploy to Hestia
-      - name: Upload and extract on server
-        run: |
-          scp -o StrictHostKeyChecking=no deploy.zip ${{ secrets.server_username }}@${{ secrets.server_host }}:/home/${{ secrets.server_username }}/deploy.zip
-          ssh -o StrictHostKeyChecking=no ${{ secrets.server_username }}@${{ secrets.server_host }} "
-            
-            export DEPLOY_PATH=\"/home/${{ secrets.server_username }}/web/ai.writing.team2lesgo.site/public_html\" &&
-            export HOME_PATH=\"/home/${{ secrets.server_username }}\" &&
-            
-            cd \$DEPLOY_PATH &&
-            unzip -o \$HOME_PATH/deploy.zip &&
-            rm \$HOME_PATH/deploy.zip &&
-            
-            # --- PERBAIKAN DI SINI ---
-            # Gunakan path lengkap ke PHP
-            /usr/bin/php artisan optimize &&
-            /usr/bin/php artisan storage:link &&
-            chmod -R 775 storage bootstrap/cache
+    # upload and deploy to Hestia then unzip
+    - name: Upload and extract on server
+      run: |
+          scp -o StrictHostKeyChecking=no deploy.zip ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }}:/home/${{ secrets.SERVER_USERNAME }}/deploy.zip
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }} "
+            cd /home/${{ secrets.SERVER_USERNAME }}/web/pakevan.web.id/public_html &&
+            unzip -o /home/${{ secrets.SERVER_USERNAME }}/deploy.zip &&
+            rm /home/${{ secrets.SERVER_USERNAME }}/deploy.zip &&
+            php artisan optimize
           "
